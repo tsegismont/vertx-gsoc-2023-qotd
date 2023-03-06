@@ -1,0 +1,97 @@
+= Eclipse Vert.x GSoC 2023 Assessment App
+:toc:
+:toc-placement!:
+
+In 2023, the Eclipse Vert.x team proposes subjects for Google Summer of Code through the Eclipse organization.
+
+In addition to the GSoC proposal document, we ask candidates to implement a simple Vert.x application.
+This will help us make sure candidates have a basic understanding of asynchronous programming and the Vert.x toolkit.
+
+toc::[]
+
+== The assessment app
+
+This repository contains a skeleton for a "Quotes Of The Day" Vert.x application.
+The Maven POM file is set up for you so fork the repository and start coding.
+
+The application involves a few Vert.x modules: Vert.x Web, Vert.x JUnit5, Pg Client.
+
+=== Running the database
+
+In a terminal, run:
+
+[source,shell]
+----
+docker run \
+  -e POSTGRES_USER=quotes \
+  -e POSTGRES_PASSWORD=super$ecret \
+  -e POSTGRES_DB=quotes \
+  -v "$(pwd)/src/main/resources/import.sql":/docker-entrypoint-initdb.d/import.sql \
+  -p 5432:5432 \
+  -ti \
+  postgres:15.2
+----
+
+
+=== Running the app
+
+In a terminal, run:
+
+[source,shell]
+----
+./mvnw vertx:run
+----
+
+This will start the application on port `8080`. Application is redeployed when source code changes.
+
+=== Running tests
+
+In a terminal, run:
+
+[source,shell]
+----
+./mvnw test
+----
+
+== Tasks
+
+=== Setup and basic retrieval
+
+In `QuoteOfTheDayVerticle` class, setup a Vert.x Web `Router`.
+
+When the HTTP server is ready, make sure that requests to `/quotes` will return all the quotes from the database in the JSON format.
+
+The `QuoteOfTheDayVerticleTest` unit test will verify this behavior.
+
+=== Post new quotes
+
+Modify your Vert.x Web `Router` so that a `POST` request to `/quotes` allows to insert a new quote in the database.
+
+Quotes must have a text and an author.
+If the author is not provided by the user, the application should add the default "Unknown" value.
+If the text is not provided, the application should reject the request with `400` status.
+
+Add tests to `QuoteOfTheDayVerticleTest` to verify your code.
+
+=== Realtime quotes
+
+Modify the code so that websocket requests to `/realtime` receive any new quote inserted in the database.
+
+Add tests to `QuoteOfTheDayVerticleTest` to verify your code.
+
+== Submitting code
+
+Please share your implementation by providing a pull request to this repository.
+
+*Do not try to play smart by copying other candidates pull requests.*
+
+In order to ease the review:
+
+* rebase your pull request on `master` regularly
+* organize your `git` history to show one commit per task
+
+== Getting help
+
+The http://vertx.io/docs[Vert.x docs] have all the information you need to implement the assessment application.
+
+If you are not sure how to proceed with one or more of the tasks, get in touch with the possible mentors (email links on the https://wiki.eclipse.org/Google_Summer_of_Code_2023_Ideas#Eclipse_Vert.x[Eclipse wiki page for GSoC] or you can https://github.com/tsegismont/vertx-gsoc-2023-qotd/issues/new[file an issue] in this project).
