@@ -68,6 +68,7 @@ public class QuoteOfTheDayVerticleTest {
           assertEquals(200, response.statusCode(), response.bodyAsString());
           JsonArray quotes = response.body();
           assertFalse(quotes.isEmpty());
+          testContext.completeNow();
         });
       }));
   }
