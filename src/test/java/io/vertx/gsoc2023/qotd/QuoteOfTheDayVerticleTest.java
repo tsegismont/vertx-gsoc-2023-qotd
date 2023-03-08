@@ -2,6 +2,7 @@ package io.vertx.gsoc2023.qotd;
 
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
@@ -19,8 +20,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.testcontainers.containers.BindMode.READ_ONLY;
 
 @ExtendWith(VertxExtension.class)
@@ -58,7 +58,7 @@ public class QuoteOfTheDayVerticleTest {
   }
 
   @Test
-  public void testGetQuotes(VertxTestContext testContext) {
+  void testGetQuotes(VertxTestContext testContext) {
     webClient.get("/quotes")
       .as(BodyCodec.jsonArray())
       .expect(ResponsePredicate.SC_OK)
@@ -72,4 +72,83 @@ public class QuoteOfTheDayVerticleTest {
         });
       }));
   }
+
+  @Test
+  void testAddQuoteWithNoText(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_BAD_REQUEST)
+      .sendJsonObject(new JsonObject().put("author", "Shakespeare"),
+        testContext.succeeding(response -> {
+          testContext.verify(() -> {
+            String body = response.bodyAsString();
+            assertEquals(400, response.statusCode(), body);
+            testContext.completeNow();
+          });
+        }));
+  }
+
+  @Test
+  void testAddQuoteWithNoAuthor(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_OK)
+      .expect(ResponsePredicate.JSON)
+      .sendJsonObject(new JsonObject().put("text", "To be, or not to be"),
+        testContext.succeeding(response -> {
+          testContext.verify(() -> {
+            assertEquals(200, response.statusCode(), response.bodyAsString());
+            JsonObject body = response.bodyAsJsonObject();
+            assertEquals("To be, or not to be", body.getString("text"));
+            assertEquals("Unknown", body.getString("author"));
+            assertNotNull(body.getInteger("quote_id"));
+            testContext.completeNow();
+          });
+        }));
+  }
+
+  @Test
+  void testAddQuote(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_OK)
+      .expect(ResponsePredicate.JSON)
+      .sendJsonObject(new JsonObject().put("text", "To be, or not to be").put("author", "Shakespeare"),
+        testContext.succeeding(response -> {
+          testContext.verify(() -> {
+            assertEquals(200, response.statusCode(), response.bodyAsString());
+            JsonObject body = response.bodyAsJsonObject();
+            assertEquals("To be, or not to be", body.getString("text"));
+            assertEquals("Shakespeare", body.getString("author"));
+            assertNotNull(body.getInteger("quote_id"));
+            testContext.completeNow();
+          });
+        }));
+  }
+
+  @Test
+  void testAddQuoteWithNullRequest(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_BAD_REQUEST)
+      .sendJsonObject(null,
+        testContext.succeeding(response -> {
+          testContext.verify(() -> {
+            String body = response.bodyAsString();
+            assertEquals(400, response.statusCode(), body);
+            testContext.completeNow();
+          });
+        }));
+  }
+
+  @Test
+  void testAddQuoteWithStringRequest(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_BAD_REQUEST)
+      .sendBuffer(Buffer.buffer("test"),
+        testContext.succeeding(response -> {
+          testContext.verify(() -> {
+            String body = response.bodyAsString();
+            assertEquals(400, response.statusCode(), body);
+            testContext.completeNow();
+          });
+        }));
+  }
+
 }
