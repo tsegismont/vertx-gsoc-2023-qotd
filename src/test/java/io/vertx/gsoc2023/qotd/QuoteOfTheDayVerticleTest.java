@@ -29,8 +29,8 @@ public class QuoteOfTheDayVerticleTest {
 
   private static final int PORT = 8888;
 
-  private Vertx vertx = Vertx.vertx();
-  private WebClient webClient = WebClient.create(vertx, new WebClientOptions().setDefaultPort(PORT));
+  private final Vertx vertx = Vertx.vertx();
+  private final WebClient webClient = WebClient.create(vertx, new WebClientOptions().setDefaultPort(PORT));
 
   @Container
   public static GenericContainer<?> postgres = new GenericContainer<>(DockerImageName.parse("postgres:15.2"))
