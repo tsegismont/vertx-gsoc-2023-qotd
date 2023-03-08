@@ -2,14 +2,20 @@ package io.vertx.gsoc2023.qotd;
 
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.impl.logging.Logger;
+import io.vertx.core.impl.logging.LoggerFactory;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowSet;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
@@ -37,10 +43,19 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
   }
 
   private Router setupRouter() {
-    return Router.router(vertx);
+    var router = Router.router(vertx);
+    router.get("/quotes").respond(ctx ->
+      pgPool.query("SELECT * from quotes").execute()
+        .map(rowSet -> {
+          JsonArray fetchedQuotes = new JsonArray();
+          rowSet.forEach(row -> fetchedQuotes.add(row.toJson()));
+          return fetchedQuotes;
+        }));
+    return router;
   }
 
   private HttpServer createHttpServer(Router router) {
     return vertx.createHttpServer(new HttpServerOptions()).requestHandler(router);
   }
+
 }
