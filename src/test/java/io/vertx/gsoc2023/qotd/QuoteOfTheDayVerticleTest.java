@@ -151,4 +151,29 @@ public class QuoteOfTheDayVerticleTest {
         }));
   }
 
+  @Test
+  void testRealtimeEndpoint(VertxTestContext testContext) {
+    testRealtimeEndpoint(testContext, "/realtime");
+    testRealtimeEndpoint(testContext, "/realtime/");
+    webClient.post("/quotes").sendJsonObject(new JsonObject().put("text", "To be, or not to be"));
+  }
+
+  private void testRealtimeEndpoint(VertxTestContext testContext, String requestURI) {
+    vertx.createHttpClient().webSocket(PORT, "localhost", requestURI,
+      testContext.succeeding(arSocket ->
+        arSocket.binaryMessageHandler(buffer -> {
+          JsonObject jsonObject = buffer.toJsonObject();
+          testContext.verify(() -> {
+            assertEquals("To be, or not to be", jsonObject.getString("text"));
+            assertEquals("Unknown", jsonObject.getString("author"));
+            testContext.completeNow();
+          });
+        })));
+  }
+
+  @Test
+  void testUsingWebsocketWithUnknownURI(VertxTestContext testContext) {
+    vertx.createHttpClient().webSocket(PORT, "localhost", "/bad/uri", testContext.failingThenComplete());
+  }
+
 }
