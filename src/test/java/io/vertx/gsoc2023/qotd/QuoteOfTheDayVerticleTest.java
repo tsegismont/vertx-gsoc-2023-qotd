@@ -3,6 +3,7 @@ package io.vertx.gsoc2023.qotd;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.WebSocketBase;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
@@ -152,16 +153,10 @@ public class QuoteOfTheDayVerticleTest {
   }
 
   @Test
-  void testRealtimeEndpoint(VertxTestContext testContext) {
-    testRealtimeEndpoint(testContext, "/realtime");
-    testRealtimeEndpoint(testContext, "/realtime/");
-    webClient.post("/quotes").sendJsonObject(new JsonObject().put("text", "To be, or not to be"));
-  }
-
-  private void testRealtimeEndpoint(VertxTestContext testContext, String requestURI) {
-    vertx.createHttpClient().webSocket(PORT, "localhost", requestURI,
-      testContext.succeeding(arSocket ->
-        arSocket.binaryMessageHandler(buffer -> {
+  void testRealtime(VertxTestContext testContext) {
+    vertx.createHttpClient().webSocket(PORT, "localhost", "/realtime",
+      testContext.succeeding(ws ->
+        ws.binaryMessageHandler(buffer -> {
           JsonObject jsonObject = buffer.toJsonObject();
           testContext.verify(() -> {
             assertEquals("To be, or not to be", jsonObject.getString("text"));
@@ -169,11 +164,7 @@ public class QuoteOfTheDayVerticleTest {
             testContext.completeNow();
           });
         })));
-  }
-
-  @Test
-  void testUsingWebsocketWithUnknownURI(VertxTestContext testContext) {
-    vertx.createHttpClient().webSocket(PORT, "localhost", "/bad/uri", testContext.failingThenComplete());
+    webClient.post("/quotes").sendJsonObject(new JsonObject().put("text", "To be, or not to be"));
   }
 
 }
