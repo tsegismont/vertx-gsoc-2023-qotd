@@ -66,21 +66,16 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
         JsonObject body = ctx.body().asJsonObject();
         if (body != null && body.containsKey("text")) {
           pgPool.preparedQuery("INSERT INTO quotes (text, author) VALUES ($1, $2) RETURNING *")
-            .execute(Tuple.of(body.getString("text"), body.getString("author", "Unknown")),
-              ar -> {
-                if (ar.succeeded()) {
-                  var result = ar.result();
-                  Row row = result.iterator().next();
-                  JsonObject asJson = row.toJson();
-                  // Send inserted quote to websockets listening to /realtime
-                  for (String socketWriterHandlerID : socketsWriterHandlerIDs) {
-                    vertx.eventBus().send(socketWriterHandlerID, asJson.toBuffer());
-                  }
-                  ctx.json(asJson);
-                } else {
-                  ctx.fail(ar.cause());
-                }
-              });
+            .execute(Tuple.of(body.getString("text"), body.getString("author", "Unknown")))
+            .onSuccess(result -> {
+              Row row = result.iterator().next();
+              JsonObject asJson = row.toJson();
+              // Send inserted quote to websockets listening to /realtime
+              for (String socketWriterHandlerID : socketsWriterHandlerIDs) {
+                vertx.eventBus().send(socketWriterHandlerID, asJson.toBuffer());
+              }
+              ctx.json(asJson);
+            });
         } else {
           ctx.fail(400);
         }
