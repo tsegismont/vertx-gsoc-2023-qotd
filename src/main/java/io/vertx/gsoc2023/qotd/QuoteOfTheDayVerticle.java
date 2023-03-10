@@ -46,9 +46,16 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private Router setupRouter() {
     var router = Router.router(vertx);
+    setupWebSocketRoute(router);
     setupGet(router);
     setupPost(router);
     return router;
+  }
+
+  private void setupWebSocketRoute(Router router) {
+    router.route("/realtime").handler(ctx ->
+      ctx.request().toWebSocket().onSuccess(ws ->
+        socketsWriterHandlerIDs.add(ws.binaryHandlerID())));
   }
 
   private void setupPost(Router router) {
@@ -91,17 +98,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
   }
 
   private HttpServer createHttpServer(Router router) {
-    return vertx.createHttpServer(new HttpServerOptions()).requestHandler(router)
-      .webSocketHandler(ws ->  {
-        // Path without trailing slashes. This means "/realtime", "/realtime/" and "/realtime//" are valid paths.
-        // This is to keep the same behavior as routers paths.
-        String cleanPath = removeTrailingSlashes(ws.path());
-        if (cleanPath.equals("/realtime")) {
-          socketsWriterHandlerIDs.add(ws.binaryHandlerID());
-        } else {
-          ws.reject();
-        }
-      });
+    return vertx.createHttpServer(new HttpServerOptions()).requestHandler(router);
   }
 
   private static String removeTrailingSlashes(String str) {
