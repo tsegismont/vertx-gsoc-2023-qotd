@@ -15,13 +15,13 @@ import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.Tuple;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private PgPool pgPool;
-  private final List<String> socketsWriterHandlerIDs = new ArrayList<>();
+  private final Set<String> socketsWriterHandlerIDs = new HashSet<>();
 
   @Override
   public void start(Promise<Void> startFuture) {
@@ -54,8 +54,11 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private void setupWebSocketRoute(Router router) {
     router.route("/realtime").handler(ctx ->
-      ctx.request().toWebSocket().onSuccess(ws ->
-        socketsWriterHandlerIDs.add(ws.binaryHandlerID())));
+      ctx.request().toWebSocket().onSuccess(ws -> {
+        String socketWriterHandlerID = ws.binaryHandlerID();
+        socketsWriterHandlerIDs.add(socketWriterHandlerID);
+        ws.endHandler(Void -> socketsWriterHandlerIDs.remove(socketWriterHandlerID));
+      }));
   }
 
   private void setupPost(Router router) {
