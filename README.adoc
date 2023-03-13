@@ -24,7 +24,7 @@ In a terminal, run:
 ----
 docker run \
   -e POSTGRES_USER=quotes \
-  -e POSTGRES_PASSWORD=super$ecret \
+  -e POSTGRES_PASSWORD='super$ecret' \
   -e POSTGRES_DB=quotes \
   -v "$(pwd)/src/main/resources/import.sql":/docker-entrypoint-initdb.d/import.sql \
   -p 5432:5432 \
