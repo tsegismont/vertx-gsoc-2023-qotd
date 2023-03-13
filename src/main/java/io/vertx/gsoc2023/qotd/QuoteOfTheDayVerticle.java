@@ -1,15 +1,22 @@
 package io.vertx.gsoc2023.qotd;
 
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.Tuple;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
@@ -37,10 +44,64 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
   }
 
   private Router setupRouter() {
-    return Router.router(vertx);
+    Router router = Router.router(vertx);
+
+    router.route().failureHandler(ctx -> {
+      ctx.response()
+        .setStatusCode(HttpResponseStatus.INTERNAL_SERVER_ERROR.code())
+        .end("Failure: " + ctx.failure().getMessage());
+    });
+
+    router.get("/quotes").handler(ctx -> {
+      selectQuotes().compose(rows -> {
+        JsonArray jsonArray = new JsonArray();
+        rows.forEach(row -> jsonArray.add(row.toJson()));
+
+        return ctx.response()
+          .putHeader(HttpHeaderNames.CONTENT_TYPE, "application/json")
+          .end(jsonArray.encodePrettily());
+      }).onFailure(cause -> ctx.fail(cause));
+    });
+
+    router.post("/quotes").handler(ctx -> {
+      ctx.request()
+        .body()
+        .compose(buff -> {
+          JsonObject jsonObject = buff.toJsonObject();
+  
+          if (jsonObject.getString("text") == null) {
+            return ctx.response()
+              .setStatusCode(HttpResponseStatus.BAD_REQUEST.code())
+              .end("Quote text must be provided in payload");
+          }
+  
+          return insertQuote(jsonObject.getString("author", "Unknown"), jsonObject.getString("text"))
+              .compose(rows -> {
+                return ctx.response()
+                  .setStatusCode(HttpResponseStatus.CREATED.code())
+                  .end();
+              });
+        }).onFailure(cause -> ctx.fail(cause));
+    });
+
+    return router;
   }
 
   private HttpServer createHttpServer(Router router) {
     return vertx.createHttpServer(new HttpServerOptions()).requestHandler(router);
+  }
+  
+  private Future<RowSet<Row>> selectQuotes() {
+    return pgPool.withConnection(connection -> 
+      connection
+      .query("SELECT * FROM quotes ")
+      .execute());
+  }
+  
+  private Future<RowSet<Row>> insertQuote(String author, String text) {
+    return pgPool.withConnection(connection -> 
+      connection
+      .preparedQuery("INSERT INTO quotes (author, text) VALUES ($1, $2) ")
+      .execute(Tuple.of(author, text)));
   }
 }
