@@ -80,8 +80,20 @@ public class QuoteOfTheDayVerticleTest {
       .sendJsonObject(new JsonObject().put("author", "Shakespeare"),
         testContext.succeeding(response -> {
           testContext.verify(() -> {
-            String body = response.bodyAsString();
-            assertEquals(400, response.statusCode(), body);
+            assertEquals(400, response.statusCode(), response.bodyAsString());
+            testContext.completeNow();
+          });
+        }));
+  }
+
+  @Test
+  void testAddQuoteWithAuthorNamedText(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_BAD_REQUEST)
+      .sendJsonObject(new JsonObject().put("author", "text"),
+        testContext.succeeding(response -> {
+          testContext.verify(() -> {
+            assertEquals(400, response.statusCode(), response.bodyAsString());
             testContext.completeNow();
           });
         }));
