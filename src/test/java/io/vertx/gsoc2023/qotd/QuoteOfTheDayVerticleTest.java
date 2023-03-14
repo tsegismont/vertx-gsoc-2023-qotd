@@ -9,6 +9,7 @@ import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.ext.web.client.predicate.ResponsePredicate;
 import io.vertx.ext.web.codec.BodyCodec;
+import io.vertx.junit5.Checkpoint;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
 import org.junit.jupiter.api.AfterEach;
@@ -165,6 +166,7 @@ public class QuoteOfTheDayVerticleTest {
 
   @Test
   void testRealtime(VertxTestContext testContext) {
+    Checkpoint quotesReceived = testContext.checkpoint(5);
     vertx.createHttpClient().webSocket(PORT, "localhost", "/realtime",
       testContext.succeeding(ws ->
         ws.binaryMessageHandler(buffer -> {
@@ -172,10 +174,13 @@ public class QuoteOfTheDayVerticleTest {
           testContext.verify(() -> {
             assertEquals("To be, or not to be", jsonObject.getString("text"));
             assertEquals("Unknown", jsonObject.getString("author"));
-            testContext.completeNow();
+            quotesReceived.flag();
           });
         })));
-    webClient.post("/quotes").sendJsonObject(new JsonObject().put("text", "To be, or not to be"));
+    // Insert quote five times
+    for (int i = 0; i < 5; i++) {
+      webClient.post("/quotes").sendJsonObject(new JsonObject().put("text", "To be, or not to be"));
+    }
   }
 
 }
