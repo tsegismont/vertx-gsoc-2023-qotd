@@ -3,6 +3,7 @@ package io.vertx.gsoc2023.qotd;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonArray;
@@ -73,16 +74,19 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
             .onSuccess(result -> {
               Row row = result.iterator().next();
               JsonObject asJson = row.toJson();
-              // Send inserted quote to websockets listening to /realtime
-              for (String socketWriterHandlerID : socketsWriterHandlerIDs) {
-                vertx.eventBus().send(socketWriterHandlerID, asJson.toBuffer());
-              }
+              sendToWebSocketsListeningInRealtime(asJson.toBuffer());
               ctx.json(asJson);
             });
         } else {
           ctx.fail(400);
         }
       });
+  }
+
+  private void sendToWebSocketsListeningInRealtime(Buffer buffer) {
+    for (String socketWriterHandlerID : socketsWriterHandlerIDs) {
+      vertx.eventBus().send(socketWriterHandlerID, buffer);
+    }
   }
 
   private void setupGet(Router router) {
