@@ -16,6 +16,7 @@ import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.Tuple;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
@@ -62,6 +63,27 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       }).onFailure(cause -> ctx.fail(cause));
     });
 
+    router.post("/quotes").handler(ctx -> {
+      ctx.request()
+        .body()
+        .compose(buff -> {
+          JsonObject jsonObject = buff.toJsonObject();
+  
+          if (jsonObject.getString("text") == null) {
+            return ctx.response()
+              .setStatusCode(HttpResponseStatus.BAD_REQUEST.code())
+              .end("Quote text must be provided in payload");
+          }
+  
+          return insertQuote(jsonObject.getString("author", "Unknown"), jsonObject.getString("text"))
+              .compose(rows -> {
+                return ctx.response()
+                  .setStatusCode(HttpResponseStatus.CREATED.code())
+                  .end();
+              });
+        }).onFailure(cause -> ctx.fail(cause));
+    });
+
     return router;
   }
 
@@ -74,5 +96,12 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       connection
       .query("SELECT * FROM quotes ")
       .execute());
+  }
+  
+  private Future<RowSet<Row>> insertQuote(String author, String text) {
+    return pgPool.withConnection(connection -> 
+      connection
+      .preparedQuery("INSERT INTO quotes (author, text) VALUES ($1, $2) ")
+      .execute(Tuple.of(author, text)));
   }
 }
