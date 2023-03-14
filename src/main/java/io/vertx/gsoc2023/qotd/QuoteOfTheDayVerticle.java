@@ -76,7 +76,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
               JsonObject asJson = row.toJson();
               sendToWebSocketsListeningInRealtime(asJson.toBuffer());
               ctx.json(asJson);
-            });
+            }).onFailure(ctx::fail);
         } else {
           ctx.fail(400);
         }
