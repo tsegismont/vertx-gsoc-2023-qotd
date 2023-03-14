@@ -103,8 +103,4 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
     return vertx.createHttpServer(new HttpServerOptions()).requestHandler(router);
   }
 
-  private static String removeTrailingSlashes(String str) {
-    return str.replaceAll("/+$", "");
-  }
-
 }
