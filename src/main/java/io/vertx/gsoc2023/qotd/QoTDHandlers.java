@@ -5,6 +5,11 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.pgclient.PgPool;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.RowSet;
+import io.vertx.sqlclient.Tuple;
+
+import static io.vertx.core.Future.failedFuture;
 
 public record QoTDHandlers(PgPool pool) {
 
@@ -33,5 +38,21 @@ public record QoTDHandlers(PgPool pool) {
         });
         return Future.succeededFuture(jsonArray);
       });
+  }
+
+  public void postNewQuote(RoutingContext context) {
+    var payload = context.body().asJsonObject();
+    insertQuote(payload)
+      .onFailure(cause -> context.response().setStatusCode(400).end())
+      .onSuccess(__ -> context.response().setStatusCode(201).end());
+  }
+
+  private Future<Void> insertQuote(JsonObject quote) {
+    if (quote.getString("text") == null)
+      return failedFuture(new IllegalArgumentException("The 'text' field must be provided"));
+    return pool
+      .preparedQuery("INSERT INTO quotes (text, author) VALUES ($1, $2)")
+      .execute(Tuple.of(quote.getString("text"), quote.getString("author", "Unknown")))
+      .mapEmpty();
   }
 }

@@ -7,6 +7,7 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
@@ -42,6 +43,11 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
     router
       .get("/quotes")
       .handler(handlers::getAllQuotes);
+    router
+      .post("/quotes")
+      .consumes("application/json")
+      .handler(BodyHandler.create())
+      .handler(handlers::postNewQuote);
     return router;
   }
 

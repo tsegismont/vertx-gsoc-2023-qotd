@@ -72,4 +72,66 @@ public class QuoteOfTheDayVerticleTest {
         });
       }));
   }
+
+  @Test
+  public void testNewQuoteWithAuthor(VertxTestContext testContext) {
+    var payload = new JsonObject()
+      .put("text", "Have you tried double-clicking the icon?")
+      .put("author", "Jen Barber");
+    var postRequest = webClient.post("/quotes")
+      .timeout(5000)
+      .expect(ResponsePredicate.SC_CREATED)
+      .sendJsonObject(payload);
+    testContext.assertComplete(postRequest)
+      .onComplete(__ -> {
+        webClient.get("/quotes")
+          .as(BodyCodec.jsonArray())
+          .send(testContext.succeeding(response -> {
+            testContext.verify(() -> {
+              var size = response.body().size();
+              var insertedQuote = response.body().getJsonObject(size - 1);
+              assertEquals("Jen Barber", insertedQuote.getString("author"));
+              testContext.completeNow();
+            });
+          }));
+      });
+  }
+
+  @Test
+  public void testNewQuoteWithoutAuthor(VertxTestContext testContext) {
+    var payload = new JsonObject()
+      .put("text", "Life is too short.");
+    var postRequest = webClient.post("/quotes")
+      .timeout(5000)
+      .expect(ResponsePredicate.SC_CREATED)
+      .sendJsonObject(payload);
+    testContext.assertComplete(postRequest)
+      .onComplete(__ -> {
+        webClient.get("/quotes")
+          .as(BodyCodec.jsonArray())
+          .send(testContext.succeeding(response -> {
+            testContext.verify(() -> {
+              var size = response.body().size();
+              var insertedQuote = response.body().getJsonObject(size - 1);
+              assertEquals("Unknown", insertedQuote.getString("author"));
+              testContext.completeNow();
+            });
+          }));
+      });
+  }
+
+  @Test
+  public void testNewQuoteMissingText(VertxTestContext testContext) {
+    var payload = new JsonObject()
+      .put("author", "Camus");
+    webClient.post("/quotes")
+      .timeout(5000)
+      .expect(ResponsePredicate.SC_BAD_REQUEST)
+      .sendJsonObject(payload, testContext.succeeding(response -> {
+        testContext.verify(() -> {
+          assertEquals(400, response.statusCode());
+          testContext.completeNow();
+        });
+      }));
+  }
 }
