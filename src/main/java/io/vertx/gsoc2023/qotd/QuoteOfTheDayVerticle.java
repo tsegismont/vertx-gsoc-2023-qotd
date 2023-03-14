@@ -3,20 +3,29 @@ package io.vertx.gsoc2023.qotd;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Row;
+import io.vertx.sqlclient.Tuple;
+
+import java.util.HashSet;
+import java.util.Set;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private PgPool pgPool;
+  private final Set<String> socketsWriterHandlerIDs = new HashSet<>();
 
   @Override
-  public void start(Promise<Void> startFuture) throws Exception {
+  public void start(Promise<Void> startFuture) {
     ConfigRetriever retriever = ConfigRetriever.create(vertx);
     retriever.getConfig().compose(config -> {
       pgPool = setupPool(config);
@@ -37,10 +46,61 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
   }
 
   private Router setupRouter() {
-    return Router.router(vertx);
+    var router = Router.router(vertx);
+    setupWebSocketRoute(router);
+    setupGet(router);
+    setupPost(router);
+    return router;
+  }
+
+  private void setupWebSocketRoute(Router router) {
+    router.route("/realtime").handler(ctx ->
+      ctx.request().toWebSocket().onSuccess(ws -> {
+        String socketWriterHandlerID = ws.binaryHandlerID();
+        socketsWriterHandlerIDs.add(socketWriterHandlerID);
+        ws.endHandler(Void -> socketsWriterHandlerIDs.remove(socketWriterHandlerID));
+      }));
+  }
+
+  private void setupPost(Router router) {
+    router.post("/quotes")
+      .consumes("application/json")
+      .handler(BodyHandler.create())
+      .handler(ctx -> {
+        JsonObject body = ctx.body().asJsonObject();
+        if (body != null && body.containsKey("text")) {
+          pgPool.preparedQuery("INSERT INTO quotes (text, author) VALUES ($1, $2) RETURNING *")
+            .execute(Tuple.of(body.getString("text"), body.getString("author", "Unknown")))
+            .onSuccess(result -> {
+              Row row = result.iterator().next();
+              JsonObject asJson = row.toJson();
+              sendToWebSocketsListeningInRealtime(asJson.toBuffer());
+              ctx.json(asJson);
+            }).onFailure(ctx::fail);
+        } else {
+          ctx.fail(400);
+        }
+      });
+  }
+
+  private void sendToWebSocketsListeningInRealtime(Buffer buffer) {
+    for (String socketWriterHandlerID : socketsWriterHandlerIDs) {
+      vertx.eventBus().send(socketWriterHandlerID, buffer);
+    }
+  }
+
+  private void setupGet(Router router) {
+    router.get("/quotes").respond(ctx ->
+      pgPool.query("SELECT * from quotes").execute()
+        .map(rowSet -> {
+          JsonArray fetchedQuotes = new JsonArray();
+          rowSet.forEach(row -> fetchedQuotes.add(row.toJson()));
+          return fetchedQuotes;
+        }));
   }
 
   private HttpServer createHttpServer(Router router) {
     return vertx.createHttpServer(new HttpServerOptions()).requestHandler(router);
   }
+
 }
