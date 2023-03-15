@@ -18,6 +18,8 @@ import org.testcontainers.utility.DockerImageName;
 
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
@@ -36,6 +38,7 @@ public class QuoteOfTheDayVerticleTest {
 
   private Vertx vertx = Vertx.vertx();
   private WebClient webClient = WebClient.create(vertx, new WebClientOptions().setDefaultPort(PORT));
+  private HttpClient httpClient = vertx.createHttpClient(new HttpClientOptions().setDefaultPort(PORT));
 
   @Container
   public static GenericContainer<?> postgres = new GenericContainer<>(DockerImageName.parse("postgres:15.2"))
@@ -158,7 +161,7 @@ public class QuoteOfTheDayVerticleTest {
   }
   
   @Test
-  public void testPostQuoteWithouText(VertxTestContext testContext) {
+  public void testPostQuoteWithoutText(VertxTestContext testContext) {
     JsonObject testQuote = new JsonObject()
       .put("author", "John Doe");
       
@@ -171,4 +174,27 @@ public class QuoteOfTheDayVerticleTest {
         });
       }));
   }
+  
+  @Test
+  public void testRealtimeWebSocket(VertxTestContext testContext) {
+    JsonObject testQuote = new JsonObject()
+      .put("author", "Oscar Wilde")
+      .put("text", "Experience is the name everyone gives to their mistakes");
+    
+    httpClient.webSocket("/realtime")
+      .onSuccess(webSocket -> {
+        webSocket.textMessageHandler(message -> {
+          testContext.verify(() -> {
+            JsonObject receivedQuote = new JsonObject(message);
+            assertEquals(testQuote.getString("author"), receivedQuote.getString("author"));
+            assertEquals(testQuote.getString("text"), receivedQuote.getString("text"));
+            testContext.completeNow();
+          });
+        });
+      });
+  
+    webClient.post("/quotes")
+      .sendJsonObject(testQuote);
+  }
+
 }

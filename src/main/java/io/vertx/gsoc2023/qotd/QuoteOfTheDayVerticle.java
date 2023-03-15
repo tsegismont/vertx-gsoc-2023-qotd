@@ -6,6 +6,7 @@ import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
+import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonArray;
@@ -45,6 +46,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private Router setupRouter() {
     Router router = Router.router(vertx);
+    final String REALTIME_EVENT_ADDRESS = "realtime-quote";
 
     router.route().failureHandler(ctx -> {
       ctx.response()
@@ -75,14 +77,34 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
               .end("Quote text must be provided in payload");
           }
   
-          return insertQuote(jsonObject.getString("author", "Unknown"), jsonObject.getString("text"))
+          return insertQuoteAndReturn(jsonObject.getString("author", "Unknown"), jsonObject.getString("text"))
               .compose(rows -> {
+                JsonObject insertedQuote = rows.iterator().next().toJson();
+
+                ctx.vertx()
+                  .eventBus()
+                  .publish(REALTIME_EVENT_ADDRESS, insertedQuote, new DeliveryOptions().setLocalOnly(true));
+              
                 return ctx.response()
                   .setStatusCode(HttpResponseStatus.CREATED.code())
-                  .end();
+                  .putHeader(HttpHeaderNames.CONTENT_TYPE, "application/json")
+                  .end(insertedQuote.encodePrettily());
               });
         }).onFailure(cause -> ctx.fail(cause));
     });
+
+    router.get("/realtime").handler(ctx -> {
+      ctx.request()
+        .toWebSocket()
+        .onSuccess(webSocket -> {
+          ctx.vertx()
+            .eventBus()
+            .localConsumer(REALTIME_EVENT_ADDRESS, message -> {
+              webSocket.writeTextMessage(message.body().toString());
+            });
+        }).onFailure(cause -> ctx.fail(cause));
+    });
+
 
     return router;
   }
@@ -98,10 +120,10 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       .execute());
   }
   
-  private Future<RowSet<Row>> insertQuote(String author, String text) {
+  private Future<RowSet<Row>> insertQuoteAndReturn(String author, String text) {
     return pgPool.withConnection(connection -> 
       connection
-      .preparedQuery("INSERT INTO quotes (author, text) VALUES ($1, $2) ")
+      .preparedQuery("INSERT INTO quotes (author, text) VALUES ($1, $2) RETURNING * ")
       .execute(Tuple.of(author, text)));
   }
 }
