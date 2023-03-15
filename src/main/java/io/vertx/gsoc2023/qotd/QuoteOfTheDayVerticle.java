@@ -21,7 +21,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
     ConfigRetriever retriever = ConfigRetriever.create(vertx);
     retriever.getConfig().compose(config -> {
       pgPool = setupPool(config);
-      var handlers = new QoTDHandlers(pgPool);
+      var handlers = new QoTDHandlers(pgPool, vertx.eventBus());
       var router = setupRouter(handlers);
       var httpServer = createHttpServer(router);
       return httpServer.listen(config.getInteger("httpPort", 8080)).<Void>mapEmpty();
@@ -48,6 +48,9 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       .consumes("application/json")
       .handler(BodyHandler.create())
       .handler(handlers::postNewQuote);
+    router
+      .get("/realtime")
+      .handler(handlers::realtimeQuotes);
     return router;
   }
 
