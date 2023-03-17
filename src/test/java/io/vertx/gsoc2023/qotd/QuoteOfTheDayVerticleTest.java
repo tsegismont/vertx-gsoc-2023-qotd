@@ -87,16 +87,20 @@ public class QuoteOfTheDayVerticleTest {
       var postRequest = webClient.post("/quotes")
         .timeout(5000)
         .expect(ResponsePredicate.SC_CREATED)
+        .expect(ResponsePredicate.JSON)
+        .as(BodyCodec.jsonObject())
         .sendJsonObject(payload);
       testContext.assertComplete(postRequest)
-        .onComplete(__ -> {
+        .onSuccess(postResponse -> {
           webClient.get("/quotes")
             .as(BodyCodec.jsonArray())
-            .send(testContext.succeeding(response ->
+            .send(testContext.succeeding(getResponse ->
               testContext.verify(() -> {
-                var size = response.body().size();
-                var insertedQuote = response.body().getJsonObject(size - 1);
+                assertNotNull(postResponse.body());
+                var size = getResponse.body().size();
+                var insertedQuote = getResponse.body().getJsonObject(size - 1);
                 assertEquals("Jen Barber", insertedQuote.getString("author"));
+                assertEquals(postResponse.body(), insertedQuote);
                 testContext.completeNow();
               })));
         });
@@ -109,16 +113,20 @@ public class QuoteOfTheDayVerticleTest {
       var postRequest = webClient.post("/quotes")
         .timeout(5000)
         .expect(ResponsePredicate.SC_CREATED)
+        .expect(ResponsePredicate.JSON)
+        .as(BodyCodec.jsonObject())
         .sendJsonObject(payload);
       testContext.assertComplete(postRequest)
-        .onComplete(__ -> {
+        .onSuccess(postResponse -> {
           webClient.get("/quotes")
             .as(BodyCodec.jsonArray())
-            .send(testContext.succeeding(response ->
+            .send(testContext.succeeding(getResponse ->
               testContext.verify(() -> {
-                var size = response.body().size();
-                var insertedQuote = response.body().getJsonObject(size - 1);
+                assertNotNull(postResponse.body());
+                var size = getResponse.body().size();
+                var insertedQuote = getResponse.body().getJsonObject(size - 1);
                 assertEquals("Unknown", insertedQuote.getString("author"));
+                assertEquals(postResponse.body(), insertedQuote);
                 testContext.completeNow();
               })));
         });
@@ -131,9 +139,12 @@ public class QuoteOfTheDayVerticleTest {
       webClient.post("/quotes")
         .timeout(5000)
         .expect(ResponsePredicate.SC_BAD_REQUEST)
+        .expect(ResponsePredicate.JSON)
+        .as(BodyCodec.jsonObject())
         .sendJsonObject(payload, testContext.succeeding(response ->
           testContext.verify(() -> {
             assertEquals(400, response.statusCode());
+            assertNotNull(response.body().getString("message"));
             testContext.completeNow();
           })));
     }
@@ -180,7 +191,7 @@ public class QuoteOfTheDayVerticleTest {
       }
 
       @Test
-      public void testRealtimeQuotesWithouAuthor(VertxTestContext testContext) {
+      public void testRealtimeQuotesWithoutAuthor(VertxTestContext testContext) {
         var postRequestSent = testContext.checkpoint();
         var connectedToWs = testContext.checkpoint();
         var receivedData = testContext.checkpoint();
@@ -226,8 +237,9 @@ public class QuoteOfTheDayVerticleTest {
     @Test
     public void testGetQuotesHandleError(VertxTestContext testContext) {
       webClient.get("/quotes")
-        .as(BodyCodec.jsonObject())
         .expect(ResponsePredicate.SC_INTERNAL_SERVER_ERROR)
+        .expect(ResponsePredicate.JSON)
+        .as(BodyCodec.jsonObject())
         .send(testContext.succeeding(response -> {
             testContext.verify(() -> {
               assertNotNull(response.body().getString("message"));
@@ -237,9 +249,27 @@ public class QuoteOfTheDayVerticleTest {
         );
     }
 
+    @Test
+    public void testPostQuoteReturnsServerError(VertxTestContext testContext) {
+      var payload = new JsonObject().put("text", "We should avoid imperative code");
+      webClient.post("/quotes")
+        .timeout(5000)
+        .expect(ResponsePredicate.SC_INTERNAL_SERVER_ERROR)
+        .expect(ResponsePredicate.JSON)
+        .as(BodyCodec.jsonObject())
+        .sendJsonObject(payload)
+        .onComplete(testContext.succeeding(response -> {
+          testContext.verify(() -> {
+            assertNotNull(response.body().getString("message"));
+            testContext.completeNow();
+          });
+        }));
+    }
+
     @AfterEach
     public void tearDown(VertxTestContext testContext) {
       vertx.close(testContext.succeedingThenComplete());
     }
   }
 }
+

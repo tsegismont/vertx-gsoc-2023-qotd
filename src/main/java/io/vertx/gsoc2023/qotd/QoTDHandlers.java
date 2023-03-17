@@ -29,7 +29,9 @@ public class QoTDHandlers {
       .onFailure(cause -> ctx.response()
         .setStatusCode(500)
         .putHeader("content-type", "application/json")
-        .end(new JsonObject().put("message", "An error happened while trying to retrieve the quotes.").encode()))
+        .end(new JsonObject()
+          .put("message", "An error happened while trying to retrieve the quotes.")
+          .encode()))
       .onSuccess(quotes -> ctx
         .response()
         .setStatusCode(200)
@@ -40,10 +42,28 @@ public class QoTDHandlers {
   public void postNewQuote(RoutingContext context) {
     var payload = context.body().asJsonObject();
     insertQuote(payload)
-      .onFailure(cause -> context.response().setStatusCode(400).end())
+      .onFailure(cause -> {
+        if (cause instanceof IllegalArgumentException)
+          context.response()
+            .setStatusCode(400)
+            .putHeader("content-type", "application/json")
+            .end(new JsonObject()
+              .put("message", "The 'text' field must be provided.")
+              .encode());
+        else
+          context.response()
+            .setStatusCode(500)
+            .putHeader("content-type", "application/json")
+            .end(new JsonObject()
+              .put("message", "An error happened while trying to insert the quote.")
+              .encode());
+      })
       .onSuccess(quote -> {
         eventBus.send(QUOTE_INSERTED, quote);
-        context.response().setStatusCode(201).end();
+        context.response()
+          .setStatusCode(201)
+          .putHeader("content-type", "application/json")
+          .end(quote.encode());
       });
   }
 
@@ -70,7 +90,7 @@ public class QoTDHandlers {
 
   private Future<JsonObject> insertQuote(JsonObject quote) {
     if (quote.getString("text") == null)
-      return failedFuture(new IllegalArgumentException("The 'text' field must be provided"));
+      return failedFuture(new IllegalArgumentException("The 'text' field must be provided."));
     return pool
       .getConnection()
       .compose(conn ->
