@@ -92,17 +92,12 @@ public class QoTDHandlers {
     if (quote.getString("text") == null)
       return failedFuture(new IllegalArgumentException("The 'text' field must be provided."));
     return pool
-      .getConnection()
-      .compose(conn ->
-        conn
-          .preparedQuery("INSERT INTO quotes (text, author) VALUES ($1, $2) RETURNING quote_id")
-          .execute(Tuple.of(quote.getString("text"), quote.getString("author", "Unknown")))
-          .map(rows -> rows.iterator().next().getLong("quote_id"))
-          .compose(quoteId -> conn
-            .preparedQuery("SELECT * FROM quotes WHERE quote_id=$1")
-            .execute(Tuple.of(quoteId))
-            .map(rows -> rows.iterator().next().toJson()))
-          .eventually(__ -> conn.close())
-      );
+      .preparedQuery("""
+        INSERT INTO quotes (text, author)
+        VALUES ($1, $2)
+        RETURNING quote_id, text, author
+        """)
+      .execute(Tuple.of(quote.getString("text"), quote.getString("author", "Unknown")))
+      .map(rows -> rows.iterator().next().toJson());
   }
 }
