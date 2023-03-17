@@ -26,7 +26,10 @@ public class QoTDHandlers {
 
   public void getAllQuotes(RoutingContext ctx) {
     fetchAllQuotes()
-      .onFailure(Throwable::printStackTrace)
+      .onFailure(cause -> ctx.response()
+        .setStatusCode(500)
+        .putHeader("content-type", "application/json")
+        .end(new JsonObject().put("message", "An error happened while trying to retrieve the quotes.").encode()))
       .onSuccess(quotes -> ctx
         .response()
         .setStatusCode(200)
