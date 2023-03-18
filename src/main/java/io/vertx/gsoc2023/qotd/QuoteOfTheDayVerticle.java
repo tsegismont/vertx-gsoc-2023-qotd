@@ -7,6 +7,7 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
@@ -20,7 +21,8 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
     ConfigRetriever retriever = ConfigRetriever.create(vertx);
     retriever.getConfig().compose(config -> {
       pgPool = setupPool(config);
-      var router = setupRouter();
+      var handlers = new QoTDHandlers(pgPool, vertx.eventBus());
+      var router = setupRouter(handlers);
       var httpServer = createHttpServer(router);
       return httpServer.listen(config.getInteger("httpPort", 8080)).<Void>mapEmpty();
     }).onComplete(startFuture);
@@ -36,8 +38,20 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
     return PgPool.pool(vertx, connectOptions, new PoolOptions());
   }
 
-  private Router setupRouter() {
-    return Router.router(vertx);
+  private Router setupRouter(QoTDHandlers handlers) {
+    var router = Router.router(vertx);
+    router
+      .get("/quotes")
+      .handler(handlers::getAllQuotes);
+    router
+      .post("/quotes")
+      .consumes("application/json")
+      .handler(BodyHandler.create())
+      .handler(handlers::postNewQuote);
+    router
+      .get("/realtime")
+      .handler(handlers::realtimeQuotes);
+    return router;
   }
 
   private HttpServer createHttpServer(Router router) {
