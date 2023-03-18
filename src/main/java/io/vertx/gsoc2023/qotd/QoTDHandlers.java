@@ -70,10 +70,17 @@ public class QoTDHandlers {
   public void realtimeQuotes(RoutingContext context) {
     context.request()
       .toWebSocket()
+      .onFailure(cause -> context.response()
+        .setStatusCode(500)
+        .putHeader("content-type", "application/json")
+        .end(new JsonObject()
+          .put("message", "An error happened while trying to establish the websocket connection.")
+          .encode()))
       .onSuccess(wsServer -> {
         quoteInsertedConsumer.handler(message -> {
-          wsServer.writeBinaryMessage(message.body().toBuffer());
-        });
+            wsServer.writeBinaryMessage(message.body().toBuffer());
+          });
+        wsServer.closeHandler(__ -> quoteInsertedConsumer.unregister());
       });
   }
 
