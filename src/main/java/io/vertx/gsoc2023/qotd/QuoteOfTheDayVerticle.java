@@ -1,24 +1,16 @@
 package io.vertx.gsoc2023.qotd;
-
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Future;
 import io.vertx.core.Promise;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
-import io.vertx.core.http.HttpServerResponse;
-import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
-import io.vertx.sqlclient.RowSet;
 
-import java.sql.Array;
-import java.util.ArrayList;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
