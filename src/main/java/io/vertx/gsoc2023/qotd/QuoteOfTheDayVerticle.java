@@ -7,9 +7,11 @@ import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Tuple;
 
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
@@ -23,6 +25,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
     retriever.getConfig().compose(config -> {
       pgPool = setupPool(config);
       var router = setupRouter();
+      router.route().handler(BodyHandler.create().setBodyLimit(1024 * 1024));
 
       router.get("/quotes").handler((ctx) -> {
         JsonArray quoteEntry = new JsonArray();
@@ -33,7 +36,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
                 quoteEntry.add(new JsonObject().put("quote", quote.getValue("text")));
               });
             } else{
-              throw new RuntimeException("query failed - " + ar.cause());
+              ctx.response().setStatusCode(500).end("query failed - " + ar.cause().getMessage());
             }
             ctx.response()
               .putHeader("content-type", "application/json")
@@ -41,6 +44,22 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
               .end(quoteEntry.toBuffer());
           }
         );
+      });
+
+      router.post("/quotes").handler(ctx -> {
+        JsonObject req = ctx.getBodyAsJson();
+        String author = req.getString("author", "unknown");
+        String quote = req.getString("text");
+        if(quote == null)
+          ctx.response()
+            .setStatusCode(400)
+            .putHeader("content-type", "application/json")
+            .end((new JsonObject().put("error", "quote is not supplied")).toBuffer());
+        pgPool.preparedQuery("INSERT into quotes (author, text) VALUES ($1, $2)")
+          .execute(Tuple.of(author, quote), ar -> {
+            if(ar.succeeded())
+              ctx.response().end();
+          });
       });
 
       var httpServer = createHttpServer(router);

@@ -72,4 +72,50 @@ public class QuoteOfTheDayVerticleTest {
         });
       }));
   }
+
+  @Test
+  public void testPostQuotesWithAuthorNameAndQuote(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_OK)
+      .sendJsonObject(
+        new JsonObject()
+          .put("author", "John Carmack")
+          .put("text", "Focused hard work is the real key to success.")
+      ).onComplete(testContext.succeeding(response -> {
+        testContext.verify(() -> {
+          assertEquals(200, response.statusCode(), response.bodyAsString());
+          testContext.completeNow();
+        });
+      }));
+  }
+
+  @Test
+  public void testPostQuotesWithOnlyQuote(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_OK)
+      .sendJsonObject(
+        new JsonObject()
+          .put("text", "Focused hard work is the real key to success.")
+      ).onComplete(testContext.succeeding(response -> {
+        testContext.verify(() -> {
+          assertEquals(200, response.statusCode(), response.bodyAsString());
+          testContext.completeNow();
+        });
+      }));
+  }
+
+  @Test
+  public void testPostQuoteWithOnlyAuthor(VertxTestContext testContext){
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_BAD_REQUEST)
+      .sendJsonObject(
+        new JsonObject()
+          .put("author", "Eric Steve Raymond")
+      ).onComplete(testContext.succeeding(response -> {
+        testContext.verify(()-> {
+          assertEquals(400, response.statusCode(), response.bodyAsString());
+          testContext.completeNow();
+        });
+      }));
+  }
 }
