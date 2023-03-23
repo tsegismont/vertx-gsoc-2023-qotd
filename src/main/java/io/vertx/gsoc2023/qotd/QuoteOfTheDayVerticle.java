@@ -2,18 +2,28 @@ package io.vertx.gsoc2023.qotd;
 
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.Promise;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.http.HttpServerResponse;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.RowSet;
+
+import java.sql.Array;
+import java.util.ArrayList;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private PgPool pgPool;
+
 
   @Override
   public void start(Promise<Void> startFuture) throws Exception {
@@ -21,6 +31,26 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
     retriever.getConfig().compose(config -> {
       pgPool = setupPool(config);
       var router = setupRouter();
+
+      router.get("/quotes").handler((ctx) -> {
+        JsonArray quoteEntry = new JsonArray();
+        pgPool.query("SELECT  text FROM quotes").execute(
+          ar -> {
+            if (ar.succeeded()) {
+              ar.result().forEach(quote -> {
+                quoteEntry.add(new JsonObject().put("quote", quote.getValue("text")));
+              });
+            } else{
+              throw new RuntimeException("query failed - " + ar.cause());
+            }
+            ctx.response()
+              .putHeader("content-type", "application/json")
+              .setChunked(true)
+              .end(quoteEntry.toBuffer());
+          }
+        );
+      });
+
       var httpServer = createHttpServer(router);
       return httpServer.listen(config.getInteger("httpPort", 8080)).<Void>mapEmpty();
     }).onComplete(startFuture);
