@@ -15,13 +15,14 @@ import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Tuple;
 
+import java.util.ArrayList;
+
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private PgPool pgPool;
-
-
-
+  private final String EVENTBUS_ADDR = "realtime-quotes";
+  private final ArrayList<MessageConsumer<JsonObject>> consumers = new ArrayList<>();
   @Override
   public void start(Promise<Void> startFuture) throws Exception {
     ConfigRetriever retriever = ConfigRetriever.create(vertx);
@@ -29,7 +30,8 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       pgPool = setupPool(config);
       var router = setupRouter();
       EventBus eb = vertx.eventBus();
-      MessageConsumer<JsonArray> consumer = eb.consumer("realtime-feedback");
+      //MessageConsumer<JsonObject> consumer = eb.consumer("realtime-feedback");
+      //ArrayList<String> consumers = new ArrayList<>();
 
       router.get("/quotes").handler((ctx) -> {
         JsonArray quoteEntry = new JsonArray();
@@ -54,7 +56,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       });
 
       router.post("/quotes")
-        .handler(BodyHandler.create().setBodyLimit(1024 * 1024))
+        .handler(BodyHandler.create().setBodyLimit(1024 * 1024 * 100))
         .handler(ctx -> {
         JsonObject req = ctx.body().asJsonObject();
         String author = req.getString("author", "unknown");
@@ -67,7 +69,12 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
         pgPool.preparedQuery("INSERT into quotes (author, text) VALUES ($1, $2)")
           .execute(Tuple.of(author, quote), ar -> {
             if(ar.succeeded())
-              ctx.response().end(); //The Default status code is always 200 on success;
+              ar.result().forEach(result -> {
+                consumers.forEach(consumer ->{
+                  eb.send(consumer.address(), result.toJson());
+                });
+              });
+               ctx.response().end();//The Default status code is always 200 on success;
           });
       });
 
@@ -82,7 +89,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       * be seen by all other consumer handlers subscribed to
       * websocket (e.g GET requests)
       * */
-      router.get("/realtime").handler(ctx ->{
+     /* router.get("/realtime").handler(ctx ->{
         ctx.request().toWebSocket()
           .onSuccess(serverWebSocket -> {
           consumer.handler(message -> {
@@ -91,6 +98,21 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
           serverWebSocket.close(rr -> consumer.unregister());
         })
           .onFailure( failure -> {
+            ctx.response()
+              .setStatusCode(500)
+              .putHeader("content-type", "application/json")
+              .end((new JsonObject().put("error", failure.getMessage()).toBuffer()));
+          });
+      });*/
+
+      router.get("/realtime").handler(ctx -> {
+        ctx.request().toWebSocket()
+          .onSuccess(serverWS -> {
+            MessageConsumer<JsonObject> consumer = eb.consumer(serverWS.binaryHandlerID());
+            consumers.add(consumer);
+            serverWS.close( rr -> consumer.unregister());
+          })
+          .onFailure(failure -> {
             ctx.response()
               .setStatusCode(500)
               .putHeader("content-type", "application/json")
