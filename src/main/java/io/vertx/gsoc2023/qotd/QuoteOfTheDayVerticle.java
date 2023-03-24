@@ -66,7 +66,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
             .setStatusCode(400)
             .putHeader("content-type", "application/json")
             .end((new JsonObject().put("error", "quote is not supplied")).toBuffer());
-        pgPool.preparedQuery("INSERT into quotes (author, text) VALUES ($1, $2)")
+        pgPool.preparedQuery("INSERT into quotes (author, text) VALUES ($1, $2) RETURNING db_id")
           .execute(Tuple.of(author, quote), ar -> {
             if(ar.succeeded())
               ar.result().forEach(result -> {
