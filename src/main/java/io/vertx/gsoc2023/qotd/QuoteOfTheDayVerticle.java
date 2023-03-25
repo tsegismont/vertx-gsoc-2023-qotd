@@ -76,14 +76,15 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
           pgPool.preparedQuery("INSERT into quotes (author, text) VALUES ($1, $2) RETURNING *")
             .execute(Tuple.of(author, quote), ar -> {
+              JsonArray insertQuotes = new JsonArray();
               if (ar.succeeded()) {
                 ar.result().forEach(result -> {
+                  insertQuotes.add(result.toJson());
                   consumers.forEach(consumer -> {
                     eb.send(consumer.address(), result.toJson());
                   });
                 });
-                ctx.json(new JsonObject()
-                  .put("status", "success"));
+                ctx.json(insertQuotes);
               } else {
                 ctx.fail(ar.cause());
               }
