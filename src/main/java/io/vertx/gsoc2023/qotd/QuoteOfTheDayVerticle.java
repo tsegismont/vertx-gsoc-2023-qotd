@@ -1,4 +1,5 @@
 package io.vertx.gsoc2023.qotd;
+
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
@@ -23,6 +24,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
   private PgPool pgPool;
   private final String EVENTBUS_ADDR = "realtime-quotes";
   private final ArrayList<MessageConsumer<JsonObject>> consumers = new ArrayList<>();
+
   @Override
   public void start(Promise<Void> startFuture) throws Exception {
     ConfigRetriever retriever = ConfigRetriever.create(vertx);
@@ -43,9 +45,11 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
                   new JsonObject()
                     .put("quote", quote.getValue("text")));
               });
-             else
+            else {
               ctx.response().setStatusCode(500)
-                .end("query failed - " + ar.cause().getMessage());
+                .end("query failed - " + ar.cause().getMessage()).toCompletionStage();
+              return;
+            }
 
             ctx.response()
               .putHeader("content-type", "application/json")
@@ -56,39 +60,47 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       });
 
       router.post("/quotes")
-        .handler(BodyHandler.create().setBodyLimit(1024 * 1024 * 100))
+        .handler(BodyHandler.create().setBodyLimit(1024 * 100)) // we meant 100K
         .handler(ctx -> {
-        JsonObject req = ctx.body().asJsonObject();
-        String author = req.getString("author", "unknown");
-        String quote = req.getString("text");
-        if(quote == null)
-          ctx.response()
-            .setStatusCode(400)
-            .putHeader("content-type", "application/json")
-            .end((new JsonObject().put("error", "quote is not supplied")).toBuffer());
-        pgPool.preparedQuery("INSERT into quotes (author, text) VALUES ($1, $2) RETURNING db_id")
-          .execute(Tuple.of(author, quote), ar -> {
-            if(ar.succeeded())
-              ar.result().forEach(result -> {
-                consumers.forEach(consumer ->{
-                  eb.send(consumer.address(), result.toJson());
+          JsonObject req = ctx.body().asJsonObject();
+          String author = req.getString("author", "unknown");
+          String quote = req.getString("text");
+
+          if (quote == null)
+            ctx.response()
+              .setStatusCode(400)
+              .putHeader("content-type", "application/json")
+              .end((new JsonObject()
+                .put("status", "error")
+                .put("reason", "quote not supplied")).toBuffer());
+
+          pgPool.preparedQuery("INSERT into quotes (author, text) VALUES ($1, $2) RETURNING *")
+            .execute(Tuple.of(author, quote), ar -> {
+              if (ar.succeeded()) {
+                ar.result().forEach(result -> {
+                  consumers.forEach(consumer -> {
+                    eb.send(consumer.address(), result.toJson());
+                  });
                 });
-              });
-               ctx.response().end();//The Default status code is always 200 on success;
-          });
-      });
+                ctx.json(new JsonObject()
+                  .put("status", "success"));
+              } else {
+                ctx.fail(ar.cause());
+              }
+            });
+        });
 
 
       /*
-      * The route uses a  consumer handler
-      * to immediately publish or push messages
-      * (json serialized objects) on to the
-      * event bus when a messagee becomes available,
-      * so that for example all post request
-      * to the websocket to update or modify data can immediately
-      * be seen by all other consumer handlers subscribed to
-      * websocket (e.g GET requests)
-      * */
+       * The route uses a  consumer handler
+       * to immediately publish or push messages
+       * (json serialized objects) on to the
+       * event bus when a messagee becomes available,
+       * so that for example all post request
+       * to the websocket to update or modify data can immediately
+       * be seen by all other consumer handlers subscribed to
+       * websocket (e.g GET requests)
+       * */
      /* router.get("/realtime").handler(ctx ->{
         ctx.request().toWebSocket()
           .onSuccess(serverWebSocket -> {
@@ -110,7 +122,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
           .onSuccess(serverWS -> {
             MessageConsumer<JsonObject> consumer = eb.consumer(serverWS.binaryHandlerID());
             consumers.add(consumer);
-            serverWS.close( rr -> consumer.unregister());
+            serverWS.close(rr -> consumer.unregister());
           })
           .onFailure(failure -> {
             ctx.response()
