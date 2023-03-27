@@ -53,7 +53,6 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
             ctx.response()
               .putHeader("content-type", "application/json")
-              .setChunked(true)
               .end(quoteEntry.toBuffer());
           }
         );
