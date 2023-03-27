@@ -23,7 +23,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
   private PgPool pgPool;
   private final String EVENTBUS_ADDR = "realtime-quotes";
-  private final ArrayList<MessageConsumer<JsonObject>> consumers = new ArrayList<>();
+  private final ArrayList<String> consumers = new ArrayList<>();
 
   @Override
   public void start(Promise<Void> startFuture) throws Exception {
@@ -80,7 +80,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
                 ar.result().forEach(result -> {
                   insertQuotes.add(result.toJson());
                   consumers.forEach(consumer -> {
-                    eb.send(consumer.address(), result.toJson());
+                    eb.send(consumer, result.toJson());
                   });
                 });
                 ctx.json(insertQuotes);
@@ -120,15 +120,18 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       router.get("/realtime").handler(ctx -> {
         ctx.request().toWebSocket()
           .onSuccess(serverWS -> {
-            MessageConsumer<JsonObject> consumer = eb.consumer(serverWS.binaryHandlerID());
-            consumers.add(consumer);
-            serverWS.close(rr -> consumer.unregister());
+            consumers.add(serverWS.binaryHandlerID());
+            serverWS.endHandler(
+                    rr ->{
+                      consumers.remove(serverWS.binaryHandlerID());
+                    });
           })
           .onFailure(failure -> {
             ctx.response()
               .setStatusCode(500)
               .putHeader("content-type", "application/json")
-              .end((new JsonObject().put("error", failure.getMessage()).toBuffer()));
+              .end((new JsonObject()
+                      .put("error", failure.getMessage()).toBuffer()));
           });
       });
 
