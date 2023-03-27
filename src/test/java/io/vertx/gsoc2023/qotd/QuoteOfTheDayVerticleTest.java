@@ -1,7 +1,11 @@
 package io.vertx.gsoc2023.qotd;
 
 import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.WebSocket;
+import io.vertx.core.http.WebSocketConnectOptions;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClient;
@@ -31,6 +35,8 @@ public class QuoteOfTheDayVerticleTest {
 
   private Vertx vertx = Vertx.vertx();
   private WebClient webClient = WebClient.create(vertx, new WebClientOptions().setDefaultPort(PORT));
+  private HttpClient httpClient = vertx.createHttpClient(new WebClientOptions().setDefaultPort(PORT));
+  private Future<WebSocket> webSockClient;
 
   @Container
   public static GenericContainer<?> postgres = new GenericContainer<>(DockerImageName.parse("postgres:15.2"))
@@ -71,5 +77,86 @@ public class QuoteOfTheDayVerticleTest {
           testContext.completeNow();
         });
       }));
+  }
+
+  @Test
+  public void testPostQuotesWithAuthorNameAndQuote(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_OK)
+      .sendJsonObject(
+        new JsonObject()
+          .put("author", "John Carmack")
+          .put("text", "Focused hard work is the real key to success.")
+      ).onComplete(testContext.succeeding(response -> {
+        testContext.verify(() -> {
+          assertEquals(200, response.statusCode(), response.bodyAsString());
+          testContext.completeNow();
+        });
+      }));
+  }
+
+  @Test
+  public void testPostQuotesWithOnlyQuote(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_OK)
+      .sendJsonObject(
+        new JsonObject()
+          .put("text", "Focused hard work is the real key to success.")
+      ).onComplete(testContext.succeeding(response -> {
+        testContext.verify(() -> {
+          assertEquals(200, response.statusCode(), response.bodyAsString());
+          testContext.completeNow();
+        });
+      }));
+  }
+
+
+  @Test
+  public void testPostQuoteWithOnlyAuthor(VertxTestContext testContext) {
+    webClient.post("/quotes")
+      .expect(ResponsePredicate.SC_BAD_REQUEST) //400
+      .sendJsonObject(
+        new JsonObject()
+          .put("author", "Eric Steve Raymond")
+      ).onComplete(testContext.succeeding(response -> {
+        testContext.verify(() -> {
+          assertEquals(400, response.statusCode(), response.bodyAsString());
+          testContext.completeNow();
+        });
+      }));
+  }
+
+
+  @Test
+  public void testRealtimeRoute(VertxTestContext testContext) {
+    httpClient.webSocket(
+        new WebSocketConnectOptions()
+          .setHost("localhost")
+          .setURI("/realtime")
+          .setTimeout(7000))
+      .onSuccess(
+         /*on successfully establishing a websocket connection,
+          a websocket connection object is returned, we then make a post
+          request that serializes JsonObject body of request  to it's
+          event bus if the request is successful*/
+        webSocksConn -> {
+          webClient.post("/quotes")
+            .sendJsonObject(
+              new JsonObject()
+                .put("author", "John Carmack")
+                .put("text", "Low-level programming is good for the programmer's soul")
+            );
+          testContext.checkpoint().flag(); //The test will loom forver will this marker.
+        }).onComplete(
+         /*and of course we proceed to do the ususal validation when the Future returns*/
+        testContext.succeeding(webSocksConn -> {
+          webSocksConn.binaryMessageHandler(message -> {
+            JsonObject msgContent = message.toJsonObject();
+            assertEquals("John Carmack", msgContent.getString("author"));
+            webSocksConn.close();
+            testContext.completeNow();;
+          });
+        })
+      );
   }
 }
