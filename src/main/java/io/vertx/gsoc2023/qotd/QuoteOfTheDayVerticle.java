@@ -9,9 +9,11 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.pgclient.PgConnectOptions;
 import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
+import io.vertx.sqlclient.Tuple;
 
 public class QuoteOfTheDayVerticle extends AbstractVerticle {
 
@@ -43,6 +45,7 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
   private Router setupRouter() {
     var router = Router.router(vertx);
     router.get("/quotes").handler(this::retrieveQuotes);
+    router.post("/quotes").handler(BodyHandler.create()).handler(this::addQuote);
     return router;
   }
 
@@ -64,6 +67,30 @@ public class QuoteOfTheDayVerticle extends AbstractVerticle {
       })
       .onSuccess(data -> context.response().putHeader(CONTENT_TYPE, JSON_MIME).end(data))
       .onFailure(throwable -> context.fail(500, throwable));
+  }
+
+  private void addQuote(RoutingContext context) {
+    var request = context.body().asJsonObject();
+    var author = request.getString("author", "Unknown");
+    var text = request.getString("text");
+
+    if (text == null) {
+      context.fail(400);
+    } else {
+      pgPool
+        .preparedQuery("INSERT INTO quotes (text, author) VALUES ($1, $2) RETURNING quote_id, text, author")
+        .execute(Tuple.of(text, author))
+        .map(rows -> {
+          var row = rows.iterator().next();
+          return new JsonObject()
+            .put("quote_id", row.getValue("quote_id"))
+            .put("text", row.getValue("text"))
+            .put("author", row.getValue("author"))
+            .encode();
+        })
+        .onSuccess(data -> context.response().putHeader(CONTENT_TYPE, JSON_MIME).end(data))
+        .onFailure(throwable -> context.fail(500, throwable));
+    }
   }
 
   private HttpServer createHttpServer(Router router) {
