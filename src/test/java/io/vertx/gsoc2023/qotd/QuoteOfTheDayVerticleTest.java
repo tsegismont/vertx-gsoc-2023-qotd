@@ -2,6 +2,7 @@ package io.vertx.gsoc2023.qotd;
 
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClientOptions;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -164,6 +165,46 @@ public class QuoteOfTheDayVerticleTest {
         assertEquals(received, expected);
         testContext.completeNow();
       })));
+  }
+
+  @Order(6)
+  @Test
+  public void testRealtimeQuotes(VertxTestContext testContext) {
+    String text = "Get busy living or get busy dying.";
+    String author = "Stephen King";
+    var quote = new JsonObject().put("text", text).put("author", author);
+
+    var requestCheckpoint = testContext.checkpoint();
+    var websocketCheckpoint = testContext.checkpoint();
+
+    var client = vertx.createHttpClient(new HttpClientOptions().setDefaultPort(PORT));
+    client
+      .webSocket("/realtime", testContext.succeeding(socket -> {
+        webClient
+          .post("/quotes")
+          .as(BodyCodec.jsonObject())
+          .expect(ResponsePredicate.SC_OK)
+          .expect(ResponsePredicate.JSON)
+          .sendJsonObject(quote, testContext.succeeding(response -> testContext.verify(() -> {
+            var body = response.body();
+            assertNotNull(body.getInteger("quote_id"));
+            assertEquals(text, body.getString("text"));
+            assertEquals(author, body.getString("author"));
+            requestCheckpoint.flag();
+          })));
+
+        socket
+          .handler(message -> testContext.verify(() -> {
+            var body = message.toJsonObject();
+            assertNotNull(body.getInteger("quote_id"));
+            assertEquals(text, body.getString("text"));
+            assertEquals(author, body.getString("author"));
+            client.close();
+            websocketCheckpoint.flag();
+          }));
+
+      }));
+
   }
 
 }
